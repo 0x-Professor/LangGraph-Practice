@@ -133,7 +133,7 @@ st.markdown("""
         margin: 1rem 0;
     }
     
-    /* Streaming animation for typing indicator */
+    /* Typing indicator */
     .typing-indicator {
         display: inline-block;
         padding: 0.5rem 1rem;
@@ -150,30 +150,22 @@ st.markdown("""
         100% { opacity: 1.0; }
     }
     
-    /* Streaming text animation */
-    .streaming-text {
-        animation: fadeIn 0.1s ease-in;
-    }
-    
-    @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-    }
-    
-    /* Enhanced message styling for streaming */
-    .message-content {
+    /* Typewriter effect styling */
+    .typewriter-text {
         line-height: 1.6;
         word-wrap: break-word;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
     
-    /* Cursor animation for streaming */
-    .streaming-cursor {
+    /* Blinking cursor for typewriter effect */
+    .typewriter-cursor {
         display: inline-block;
         width: 2px;
-        height: 1em;
-        background-color: #667eea;
+        height: 1.2em;
+        background-color: #4285f4;
         animation: blink 1s infinite;
-        margin-left: 2px;
+        margin-left: 1px;
+        vertical-align: text-bottom;
     }
     
     @keyframes blink {
@@ -181,12 +173,18 @@ st.markdown("""
         51%, 100% { opacity: 0; }
     }
     
-    /* Status indicators for streaming */
-    .stream-status {
+    /* Status indicators for typewriter */
+    .typewriter-status {
         font-size: 0.8rem;
         color: #888;
         font-style: italic;
         padding: 0.25rem 0;
+    }
+    
+    /* Enhanced message styling */
+    .message-content {
+        line-height: 1.6;
+        word-wrap: break-word;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -205,6 +203,8 @@ if 'streaming_enabled' not in st.session_state:
     st.session_state.streaming_enabled = True
 if 'is_streaming' not in st.session_state:
     st.session_state.is_streaming = False
+if 'typewriter_speed' not in st.session_state:
+    st.session_state.typewriter_speed = 0.03  # Seconds between characters
 
 def check_backend_health():
     """Check if backend is running"""
@@ -235,6 +235,24 @@ def send_message_to_backend(message, session_id):
             return {"error": f"Backend error: {response.status_code}"}
     except requests.exceptions.RequestException as e:
         return {"error": f"Connection error: {str(e)}"}
+
+def typewriter_effect(text, placeholder, delay=0.03):
+    """Display text with typewriter effect"""
+    displayed_text = ""
+    
+    for i, char in enumerate(text):
+        displayed_text += char
+        placeholder.markdown(
+            f'<div class="typewriter-text">{displayed_text}<span class="typewriter-cursor"></span></div>',
+            unsafe_allow_html=True
+        )
+        time.sleep(delay)
+    
+    # Remove cursor after typing is complete
+    placeholder.markdown(
+        f'<div class="typewriter-text">{displayed_text}</div>',
+        unsafe_allow_html=True
+    )
 
 def stream_message_from_backend(message, session_id) -> Generator[dict, None, None]:
     """Stream message from backend API using Server-Sent Events"""
@@ -409,14 +427,11 @@ if user_input and not st.session_state.is_streaming:
                         # Add new content
                         full_response += chunk_data.get('content', '')
                         
-                        # Update display with streaming cursor
-                        response_placeholder.markdown(
-                            f'<div class="message-content streaming-text">{full_response}<span class="streaming-cursor"></span></div>', 
-                            unsafe_allow_html=True
-                        )
+                        # Update display with typewriter effect
+                        typewriter_effect(full_response, response_placeholder, st.session_state.typewriter_speed)
                         
                         # Update status
-                        status_placeholder.markdown('<div class="stream-status">Streaming response...</div>', unsafe_allow_html=True)
+                        status_placeholder.markdown('<div class="typewriter-status">Streaming response...</div>', unsafe_allow_html=True)
                         
                         # Small delay for smooth effect
                         time.sleep(0.02)
