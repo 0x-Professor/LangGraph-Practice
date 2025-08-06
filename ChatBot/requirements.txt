@@ -1,5 +1,18 @@
+# Backend dependencies
 langchain-community==0.3.27
 langchain-core==0.3.72
 langchain-google-genai==2.1.9
 langgraph==0.6.3
 dotenv==0.9.9
+
+# FastAPI backend
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+
+# Frontend dependencies
+streamlit==1.29.0
+requests==2.31.0
+
+# Additional utilities
+python-multipart==0.0.6
