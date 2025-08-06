@@ -1,10 +1,13 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 import uuid
+import json
+import asyncio
 from langchain_core.messages import HumanMessage
-from backend import chatbot, ChatState
+from backend import chatbot, streaming_chatbot, ChatState
 import uvicorn
 
 app = FastAPI(title="ChatBot API", version="1.0.0")
@@ -44,9 +47,6 @@ async def chat_endpoint(request: ChatRequest):
         # Prepare the user message
         user_message = HumanMessage(content=request.message)
         
-        # Get or create session state
-        if session_id not in active_sessions:
-            initial_state = ChatState(messages=[])
         else:
             initial_state = active_sessions[session_id]
         
