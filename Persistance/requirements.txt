@@ -1,0 +1,5 @@
+langchain-community==0.3.27
+langchain-core==0.3.72
+langchain-google-genai
+langgraph==0.6.3
+dotenv
