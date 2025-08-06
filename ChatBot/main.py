@@ -47,6 +47,9 @@ async def chat_endpoint(request: ChatRequest):
         # Prepare the user message
         user_message = HumanMessage(content=request.message)
         
+        # Get or create session state
+        if session_id not in active_sessions:
+            initial_state = ChatState(messages=[])
         else:
             initial_state = active_sessions[session_id]
         
@@ -70,6 +73,79 @@ async def chat_endpoint(request: ChatRequest):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing chat: {str(e)}")
+
+@app.post("/chat/stream")
+async def chat_stream_endpoint(request: ChatRequest):
+    """Streaming chat endpoint that returns responses word by word"""
+    try:
+        session_id = request.session_id or str(uuid.uuid4())
+        
+        async def generate_stream():
+            try:
+                # Prepare the user message
+                user_message = HumanMessage(content=request.message)
+                
+                # Get or create session state
+                if session_id not in active_sessions:
+                    initial_state = ChatState(messages=[])
+                else:
+                    initial_state = active_sessions[session_id].copy()
+                
+                # Add user message to state
+                initial_state['messages'].append(user_message)
+                
+                # Send initial response with session info
+                yield f"data: {json.dumps({'type': 'session_start', 'session_id': session_id})}\n\n"
+                
+                # Stream the response
+                full_response = ""
+                async for chunk in streaming_chatbot.astream(initial_state, config={"configurable": {"thread_id": session_id}}):
+                    if 'chunk' in chunk and chunk.get('partial', False):
+                        # Send each chunk as it arrives
+                        chunk_data = {
+                            'type': 'chunk',
+                            'content': chunk['chunk'],
+                            'session_id': session_id
+                        }
+                        yield f"data: {json.dumps(chunk_data)}\n\n"
+                        full_response += chunk['chunk']
+                        
+                        # Small delay for smooth streaming effect
+                        await asyncio.sleep(0.01)
+                    
+                    elif not chunk.get('partial', True):
+                        # Final message - store the complete state
+                        active_sessions[session_id] = chunk
+                        
+                        # Send completion signal
+                        completion_data = {
+                            'type': 'complete',
+                            'full_response': full_response,
+                            'session_id': session_id
+                        }
+                        yield f"data: {json.dumps(completion_data)}\n\n"
+                        break
+                
+            except Exception as e:
+                error_data = {
+                    'type': 'error',
+                    'error': str(e),
+                    'session_id': session_id
+                }
+                yield f"data: {json.dumps(error_data)}\n\n"
+        
+        return StreamingResponse(
+            generate_stream(),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Content-Type": "text/event-stream",
+            }
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing streaming chat: {str(e)}")
 
 @app.get("/chat/history/{session_id}")
 async def get_chat_history(session_id: str):
