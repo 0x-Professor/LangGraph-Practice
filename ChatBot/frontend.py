@@ -204,7 +204,7 @@ if 'streaming_enabled' not in st.session_state:
 if 'is_streaming' not in st.session_state:
     st.session_state.is_streaming = False
 if 'typewriter_speed' not in st.session_state:
-    st.session_state.typewriter_speed = 0.03  # Seconds between characters
+    st.session_state.typewriter_speed = 0.009  # Seconds between characters
 
 def check_backend_health():
     """Check if backend is running"""
