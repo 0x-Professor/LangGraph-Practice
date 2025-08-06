@@ -236,24 +236,6 @@ def send_message_to_backend(message, session_id):
     except requests.exceptions.RequestException as e:
         return {"error": f"Connection error: {str(e)}"}
 
-def typewriter_effect(text, placeholder, delay=0.03):
-    """Display text with typewriter effect"""
-    displayed_text = ""
-    
-    for i, char in enumerate(text):
-        displayed_text += char
-        placeholder.markdown(
-            f'<div class="typewriter-text">{displayed_text}<span class="typewriter-cursor"></span></div>',
-            unsafe_allow_html=True
-        )
-        time.sleep(delay)
-    
-    # Remove cursor after typing is complete
-    placeholder.markdown(
-        f'<div class="typewriter-text">{displayed_text}</div>',
-        unsafe_allow_html=True
-    )
-
 def stream_message_from_backend(message, session_id) -> Generator[dict, None, None]:
     """Stream message from backend API using Server-Sent Events"""
     try:
@@ -411,7 +393,7 @@ if user_input and not st.session_state.is_streaming:
     # Create placeholder for assistant response
     with st.chat_message("assistant"):
         if st.session_state.streaming_enabled:
-            # Streaming mode
+            # Streaming mode with typewriter effect
             response_placeholder = st.empty()
             status_placeholder = st.empty()
             
@@ -419,39 +401,52 @@ if user_input and not st.session_state.is_streaming:
             status_placeholder.markdown('<div class="typing-indicator">AI is thinking...</div>', unsafe_allow_html=True)
             
             full_response = ""
+            displayed_text = ""
             error_occurred = False
             
             try:
+                # Collect all chunks first
+                all_chunks = []
                 for chunk_data in stream_message_from_backend(user_input, st.session_state.session_id):
                     if chunk_data.get('type') == 'chunk':
-                        # Add new content
-                        full_response += chunk_data.get('content', '')
-                        
-                        # Update display with typewriter effect
-                        typewriter_effect(full_response, response_placeholder, st.session_state.typewriter_speed)
-                        
-                        # Update status
-                        status_placeholder.markdown('<div class="typewriter-status">Streaming response...</div>', unsafe_allow_html=True)
-                        
-                        # Small delay for smooth effect
-                        time.sleep(0.02)
-                    
+                        all_chunks.append(chunk_data.get('content', ''))
                     elif chunk_data.get('type') == 'complete':
-                        # Final response - remove cursor and status
-                        response_placeholder.markdown(
-                            f'<div class="message-content">{full_response}</div>', 
-                            unsafe_allow_html=True
-                        )
-                        status_placeholder.empty()
+                        full_response = chunk_data.get('full_response', ''.join(all_chunks))
                         break
-                    
                     elif chunk_data.get('type') == 'error':
                         error_occurred = True
                         st.error(f"Error: {chunk_data.get('error', 'Unknown error')}")
-                        status_placeholder.empty()
                         break
                 
                 if not error_occurred and full_response:
+                    # Clear typing indicator
+                    status_placeholder.empty()
+                    
+                    # Display typewriter effect
+                    status_placeholder.markdown('<div class="typewriter-status">Typing response...</div>', unsafe_allow_html=True)
+                    
+                    # Typewriter effect - display character by character
+                    for i in range(len(full_response) + 1):
+                        displayed_text = full_response[:i]
+                        if i < len(full_response):
+                            # Show cursor while typing
+                            response_placeholder.markdown(
+                                f'<div class="typewriter-text">{displayed_text}<span class="typewriter-cursor"></span></div>',
+                                unsafe_allow_html=True
+                            )
+                        else:
+                            # Final display without cursor
+                            response_placeholder.markdown(
+                                f'<div class="typewriter-text">{displayed_text}</div>',
+                                unsafe_allow_html=True
+                            )
+                        
+                        # Delay between characters
+                        time.sleep(st.session_state.typewriter_speed)
+                    
+                    # Remove status
+                    status_placeholder.empty()
+                    
                     # Add bot response to chat history
                     bot_message = {
                         'role': 'assistant',
@@ -471,7 +466,7 @@ if user_input and not st.session_state.is_streaming:
                 st.session_state.messages.pop()
         
         else:
-            # Standard mode (non-streaming)
+            # Standard mode (non-streaming) with typewriter effect
             with st.spinner("Thinking..."):
                 response = send_message_to_backend(user_input, st.session_state.session_id)
         
@@ -489,8 +484,23 @@ if user_input and not st.session_state.is_streaming:
                 }
                 st.session_state.messages.append(bot_message)
                 
-                # Display bot response
-                st.write(response['response'])
+                # Display bot response with typewriter effect
+                response_text = response['response']
+                response_placeholder = st.empty()
+                
+                for i in range(len(response_text) + 1):
+                    displayed_text = response_text[:i]
+                    if i < len(response_text):
+                        response_placeholder.markdown(
+                            f'<div class="typewriter-text">{displayed_text}<span class="typewriter-cursor"></span></div>',
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        response_placeholder.markdown(
+                            f'<div class="typewriter-text">{displayed_text}</div>',
+                            unsafe_allow_html=True
+                        )
+                    time.sleep(st.session_state.typewriter_speed)
     
     # Reset streaming state
     st.session_state.is_streaming = False
