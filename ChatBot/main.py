@@ -6,8 +6,8 @@ from typing import List, Optional
 import uuid
 import json
 import asyncio
-from langchain_core.messages import HumanMessage
-from backend import chatbot, streaming_chatbot, ChatState
+from langchain_core.messages import HumanMessage, AIMessage
+from backend import chatbot, ChatState, stream_chat_response
 import uvicorn
 
 app = FastAPI(title="ChatBot API", version="1.0.0")
@@ -92,30 +92,40 @@ async def chat_stream_endpoint(request: ChatRequest):
                     initial_state = active_sessions[session_id].copy()
                 
                 # Add user message to state
-                initial_state['messages'].append(user_message)
+                messages = initial_state.get('messages', []) + [user_message]
                 
                 # Send initial response with session info
                 yield f"data: {json.dumps({'type': 'session_start', 'session_id': session_id})}\n\n"
                 
                 # Stream the response
                 full_response = ""
-                async for chunk in streaming_chatbot.astream(initial_state, config={"configurable": {"thread_id": session_id}}):
-                    if 'chunk' in chunk and chunk.get('partial', False):
-                        # Send each chunk as it arrives
-                        chunk_data = {
-                            'type': 'chunk',
-                            'content': chunk['chunk'],
+                async for chunk_data in stream_chat_response(messages):
+                    if chunk_data.get('error'):
+                        error_data = {
+                            'type': 'error',
+                            'error': chunk_data.get('message', 'Unknown error'),
                             'session_id': session_id
                         }
-                        yield f"data: {json.dumps(chunk_data)}\n\n"
-                        full_response += chunk['chunk']
+                        yield f"data: {json.dumps(error_data)}\n\n"
+                        break
+                    
+                    elif chunk_data.get('partial', False):
+                        # Send each chunk as it arrives
+                        chunk_response = {
+                            'type': 'chunk',
+                            'content': chunk_data['chunk'],
+                            'session_id': session_id
+                        }
+                        yield f"data: {json.dumps(chunk_response)}\n\n"
+                        full_response = chunk_data['full_response']
                         
                         # Small delay for smooth streaming effect
                         await asyncio.sleep(0.01)
                     
-                    elif not chunk.get('partial', True):
+                    else:
                         # Final message - store the complete state
-                        active_sessions[session_id] = chunk
+                        final_messages = messages + [AIMessage(content=full_response)]
+                        active_sessions[session_id] = ChatState(messages=final_messages)
                         
                         # Send completion signal
                         completion_data = {

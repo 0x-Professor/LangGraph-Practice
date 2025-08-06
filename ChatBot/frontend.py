@@ -4,6 +4,8 @@ import json
 from datetime import datetime
 import time
 import uuid
+import asyncio
+from typing import Generator
 
 # Configure Streamlit page
 st.set_page_config(
@@ -130,6 +132,62 @@ st.markdown("""
         border-radius: 12px;
         margin: 1rem 0;
     }
+    
+    /* Streaming animation for typing indicator */
+    .typing-indicator {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        margin: 0.5rem 0;
+        background: linear-gradient(135deg, #f0f0f0, #e8e8e8);
+        border-radius: 15px;
+        font-style: italic;
+        color: #666;
+        animation: pulse 1.5s ease-in-out infinite alternate;
+    }
+    
+    @keyframes pulse {
+        0% { opacity: 0.6; }
+        100% { opacity: 1.0; }
+    }
+    
+    /* Streaming text animation */
+    .streaming-text {
+        animation: fadeIn 0.1s ease-in;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    
+    /* Enhanced message styling for streaming */
+    .message-content {
+        line-height: 1.6;
+        word-wrap: break-word;
+    }
+    
+    /* Cursor animation for streaming */
+    .streaming-cursor {
+        display: inline-block;
+        width: 2px;
+        height: 1em;
+        background-color: #667eea;
+        animation: blink 1s infinite;
+        margin-left: 2px;
+    }
+    
+    @keyframes blink {
+        0%, 50% { opacity: 1; }
+        51%, 100% { opacity: 0; }
+    }
+    
+    /* Status indicators for streaming */
+    .stream-status {
+        font-size: 0.8rem;
+        color: #888;
+        font-style: italic;
+        padding: 0.25rem 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -143,6 +201,10 @@ if 'session_id' not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
 if 'backend_status' not in st.session_state:
     st.session_state.backend_status = "unknown"
+if 'streaming_enabled' not in st.session_state:
+    st.session_state.streaming_enabled = True
+if 'is_streaming' not in st.session_state:
+    st.session_state.is_streaming = False
 
 def check_backend_health():
     """Check if backend is running"""
@@ -155,7 +217,7 @@ def check_backend_health():
         return "offline"
 
 def send_message_to_backend(message, session_id):
-    """Send message to backend API"""
+    """Send message to backend API (non-streaming)"""
     try:
         payload = {
             "message": message,
@@ -174,6 +236,37 @@ def send_message_to_backend(message, session_id):
     except requests.exceptions.RequestException as e:
         return {"error": f"Connection error: {str(e)}"}
 
+def stream_message_from_backend(message, session_id) -> Generator[dict, None, None]:
+    """Stream message from backend API using Server-Sent Events"""
+    try:
+        payload = {
+            "message": message,
+            "session_id": session_id
+        }
+        
+        with requests.post(
+            f"{API_BASE_URL}/chat/stream",
+            json=payload,
+            stream=True,
+            timeout=60,
+            headers={'Accept': 'text/event-stream'}
+        ) as response:
+            
+            if response.status_code != 200:
+                yield {"error": f"Backend error: {response.status_code}"}
+                return
+            
+            for line in response.iter_lines(decode_unicode=True):
+                if line.startswith('data: '):
+                    try:
+                        data = json.loads(line[6:])  # Remove 'data: ' prefix
+                        yield data
+                    except json.JSONDecodeError:
+                        continue
+                        
+    except requests.exceptions.RequestException as e:
+        yield {"error": f"Connection error: {str(e)}"}
+
 def clear_chat_session(session_id):
     """Clear chat session on backend"""
     try:
@@ -186,7 +279,7 @@ def clear_chat_session(session_id):
 st.markdown("""
 <div class="app-header">
     <div class="app-title">AI ChatBot</div>
-    <div class="app-subtitle">Powered by Google Gemini</div>
+    <div class="app-subtitle">Powered by Google Gemini with Streaming</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -196,9 +289,10 @@ if st.session_state.backend_status == "unknown":
 
 # Status indicator
 if st.session_state.backend_status == "online":
-    st.markdown("""
+    streaming_status = "🟢 Streaming" if st.session_state.streaming_enabled else "🔵 Standard"
+    st.markdown(f"""
     <div class="status-bar status-online">
-        ● Connected
+        ● Connected - {streaming_status}
     </div>
     """, unsafe_allow_html=True)
 else:
@@ -211,31 +305,40 @@ else:
     st.stop()
 
 # Control buttons
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 
 with col1:
     if st.button("🔄 New Chat", use_container_width=True):
         st.session_state.session_id = str(uuid.uuid4())
         st.session_state.messages = []
+        st.session_state.is_streaming = False
         st.rerun()
 
 with col2:
     if st.button("🗑️ Clear", use_container_width=True):
         if clear_chat_session(st.session_state.session_id):
             st.session_state.messages = []
+            st.session_state.is_streaming = False
             st.rerun()
 
 with col3:
+    streaming_label = "📡 Stream ON" if st.session_state.streaming_enabled else "📡 Stream OFF"
+    if st.button(streaming_label, use_container_width=True):
+        st.session_state.streaming_enabled = not st.session_state.streaming_enabled
+        st.rerun()
+
+with col4:
     if st.button("📊 Status", use_container_width=True):
         st.session_state.backend_status = check_backend_health()
         st.rerun()
 
-with col4:
+with col5:
     if st.session_state.messages:
         chat_export = {
             "session_id": st.session_state.session_id,
             "timestamp": datetime.now().isoformat(),
-            "messages": st.session_state.messages
+            "messages": st.session_state.messages,
+            "streaming_enabled": st.session_state.streaming_enabled
         }
         st.download_button(
             label="💾 Export",
@@ -247,13 +350,15 @@ with col4:
 
 # Chat display area
 if not st.session_state.messages:
-    st.markdown("""
+    streaming_info = "with real-time streaming" if st.session_state.streaming_enabled else "in standard mode"
+    st.markdown(f"""
     <div class="welcome-message">
-        Welcome! Start a conversation by typing a message below.
+        Welcome! Start a conversation by typing a message below.<br>
+        <small>Currently running {streaming_info}</small>
     </div>
     """, unsafe_allow_html=True)
 else:
-    # Display chat messages in a clean container
+    # Display chat messages
     for message in st.session_state.messages:
         if message['role'] == 'user':
             with st.chat_message("user"):
@@ -265,11 +370,11 @@ else:
 # Chat input
 user_input = st.chat_input(
     "Type your message here...",
-    disabled=st.session_state.backend_status != "online"
+    disabled=st.session_state.backend_status != "online" or st.session_state.is_streaming
 )
 
 # Process user input
-if user_input:
+if user_input and not st.session_state.is_streaming:
     # Add user message to chat
     user_message = {
         'role': 'user',
@@ -282,38 +387,110 @@ if user_input:
     with st.chat_message("user"):
         st.write(user_input)
     
-    # Show typing indicator and get response
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            response = send_message_to_backend(user_input, st.session_state.session_id)
+    # Set streaming state
+    st.session_state.is_streaming = True
     
-    # Handle response
-    if "error" in response:
-        st.error(f"Error: {response['error']}")
-        # Remove the user message if there was an error
-        st.session_state.messages.pop()
-    else:
-        # Add bot response to chat
-        bot_message = {
-            'role': 'assistant',
-            'content': response['response'],
-            'timestamp': datetime.now().isoformat()
-        }
-        st.session_state.messages.append(bot_message)
+    # Create placeholder for assistant response
+    with st.chat_message("assistant"):
+        if st.session_state.streaming_enabled:
+            # Streaming mode
+            response_placeholder = st.empty()
+            status_placeholder = st.empty()
+            
+            # Show initial typing indicator
+            status_placeholder.markdown('<div class="typing-indicator">AI is thinking...</div>', unsafe_allow_html=True)
+            
+            full_response = ""
+            error_occurred = False
+            
+            try:
+                for chunk_data in stream_message_from_backend(user_input, st.session_state.session_id):
+                    if chunk_data.get('type') == 'chunk':
+                        # Add new content
+                        full_response += chunk_data.get('content', '')
+                        
+                        # Update display with streaming cursor
+                        response_placeholder.markdown(
+                            f'<div class="message-content streaming-text">{full_response}<span class="streaming-cursor"></span></div>', 
+                            unsafe_allow_html=True
+                        )
+                        
+                        # Update status
+                        status_placeholder.markdown('<div class="stream-status">Streaming response...</div>', unsafe_allow_html=True)
+                        
+                        # Small delay for smooth effect
+                        time.sleep(0.02)
+                    
+                    elif chunk_data.get('type') == 'complete':
+                        # Final response - remove cursor and status
+                        response_placeholder.markdown(
+                            f'<div class="message-content">{full_response}</div>', 
+                            unsafe_allow_html=True
+                        )
+                        status_placeholder.empty()
+                        break
+                    
+                    elif chunk_data.get('type') == 'error':
+                        error_occurred = True
+                        st.error(f"Error: {chunk_data.get('error', 'Unknown error')}")
+                        status_placeholder.empty()
+                        break
+                
+                if not error_occurred and full_response:
+                    # Add bot response to chat history
+                    bot_message = {
+                        'role': 'assistant',
+                        'content': full_response,
+                        'timestamp': datetime.now().isoformat()
+                    }
+                    st.session_state.messages.append(bot_message)
+                else:
+                    # Remove user message if there was an error
+                    if error_occurred:
+                        st.session_state.messages.pop()
+                    
+            except Exception as e:
+                st.error(f"Streaming error: {str(e)}")
+                status_placeholder.empty()
+                # Remove user message on error
+                st.session_state.messages.pop()
         
-        # Display bot response
-        with st.chat_message("assistant"):
-            st.write(response['response'])
+        else:
+            # Standard mode (non-streaming)
+            with st.spinner("Thinking..."):
+                response = send_message_to_backend(user_input, st.session_state.session_id)
+        
+            # Handle response
+            if "error" in response:
+                st.error(f"Error: {response['error']}")
+                # Remove the user message if there was an error
+                st.session_state.messages.pop()
+            else:
+                # Add bot response to chat
+                bot_message = {
+                    'role': 'assistant',
+                    'content': response['response'],
+                    'timestamp': datetime.now().isoformat()
+                }
+                st.session_state.messages.append(bot_message)
+                
+                # Display bot response
+                st.write(response['response'])
+    
+    # Reset streaming state
+    st.session_state.is_streaming = False
     
     # Rerun to update the interface
     st.rerun()
 
-# Simple footer
+# Simple footer with streaming info
+streaming_mode = "Streaming Mode" if st.session_state.streaming_enabled else "Standard Mode"
 st.markdown("---")
 st.markdown(
     f"<div style='text-align: center; color: #888; font-size: 0.8rem;'>"
     f"Session: {st.session_state.session_id[:8]}... | "
-    f"Messages: {len(st.session_state.messages)}"
+    f"Messages: {len(st.session_state.messages)} | "
+    f"Mode: {streaming_mode}"
     f"</div>", 
     unsafe_allow_html=True
 )
