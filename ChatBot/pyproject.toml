@@ -6,9 +6,13 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "dotenv==0.9.9",
+    "fastapi>=0.116.1",
     "langchain-community==0.3.27",
     "langchain-core==0.3.72",
     "langchain-google-genai==2.1.9",
     "langgraph==0.6.3",
+    "python-multipart>=0.0.20",
+    "requests>=2.32.4",
     "streamlit>=1.48.0",
+    "uvicorn[standard]>=0.35.0",
 ]
