@@ -1,0 +1,30 @@
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.graph import StateGraph, START, END
+from typing import TypedDict, Literal, Annotated
+from pydantic import BaseModel, Field
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
+from langgraph.graph import add_messages
+from langgraph.checkpoint.memory import MemorySaver
+
+model = ChatGoogleGenerativeAI(model="gemini-2.0-flash", api_key="AIzaSyAG7aFAc0BT2Fjz2l93Q7xsniYtGbIDAjE", temperature=0.5, max_tokens=90000)
+
+class ChatState(TypedDict):
+    messages: Annotated[list[BaseMessage], Field(description="List of messages in the chat"), add_messages]
+    
+def chat_node(state: ChatState):
+    if not state['messages']:
+        state['messages'] = [HumanMessage(content="Hello, how can I assist you today?")]
+    else:
+        response = model.invoke(state['messages'])
+        state['messages'].append(AIMessage(content=response.content))
+    
+    return {'messages': state['messages']}
+
+checkpointer = MemorySaver()
+    
+graph = StateGraph(ChatState)
+
+graph.add_node('chat_node', chat_node)
+graph.add_edge(START, 'chat_node')
+graph.add_edge('chat_node', END)
+chatbot = graph.compile(checkpointer=checkpointer, name="ChatBot")
