@@ -1,6 +1,11 @@
+# Environment variables
+.env
+*.env
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
+*$py.class
 *$py.class
 
 # C extensions
@@ -18,6 +23,29 @@ lib/
 lib64/
 parts/
 sdist/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs and databases
+*.log
+*.sqlite
+*.sqlite3
+
+# Local development
+.DS_Store
+Thumbs.db
 var/
 wheels/
 share/python-wheels/
