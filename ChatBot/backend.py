@@ -1,3 +1,5 @@
+import os
+from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph, START, END
 from typing import TypedDict, Literal, Annotated
@@ -5,15 +7,23 @@ from pydantic import BaseModel, Field
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from langgraph.graph import add_messages
 from langgraph.checkpoint.memory import MemorySaver
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import json
 import asyncio
 
+# Load environment variables from .env file
+load_dotenv()
+
+# Get API key from environment variables
+GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+if not GOOGLE_API_KEY:
+    raise ValueError("GOOGLE_API_KEY environment variable not set. Please create a .env file with your API key.")
+
 model = ChatGoogleGenerativeAI(
     model="gemini-2.0-flash", 
-    api_key="AIzaSyAG7aFAc0BT2Fjz2l93Q7xsniYtGbIDAjE", 
+    api_key=GOOGLE_API_KEY,
     temperature=0.5, 
     max_tokens=90000,
     streaming=True  # Enable streaming

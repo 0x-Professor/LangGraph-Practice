@@ -54,13 +54,34 @@ streamlit run frontend.py --server.port 8501
 ## 🔧 Configuration
 
 ### Environment Setup
-Make sure you have a valid Google API key set in `backend.py`. The current implementation includes the key directly, but for production, use environment variables:
 
-```python
-import os
-api_key = os.getenv("GOOGLE_API_KEY", "your-default-key")
-model = ChatGoogleGenerativeAI(model="gemini-2.0-flash", api_key=api_key)
-```
+1. Copy the example environment file and update it with your API key:
+   ```bash
+   cp ../.env.example .env
+   ```
+   Then edit the `.env` file and replace `your_api_key_here` with your actual Google Gemini API key.
+
+2. Install the required Python package for environment variables:
+   ```bash
+   pip install python-dotenv
+   ```
+
+3. The application will automatically load the API key from the `.env` file. Make sure to never commit this file to version control.
+
+#### Getting a Google Gemini API Key
+1. Go to [Google AI Studio](https://aistudio.google.com/)
+2. Sign in with your Google account
+3. Navigate to the API Keys section
+4. Create a new API key or use an existing one
+5. Add this key to your `.env` file:
+   ```
+   GOOGLE_API_KEY=your_actual_api_key_here
+   ```
+
+#### Security Note
+- Never commit your `.env` file to version control
+- The `.gitignore` file is configured to exclude `.env` files
+- For production, consider using a secure secret management system
 
 ### Port Configuration
 - Backend: `http://localhost:8000`
