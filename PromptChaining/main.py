@@ -1,5 +1,5 @@
 def main():
-    print("Hello from promptchain!")
+    print("Hello from promptchain!!")
 
 
 if __name__ == "__main__":
